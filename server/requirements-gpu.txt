@@ -1,0 +1,7 @@
+# Heavy inference deps — installed only in the GPU image / on the Vultr box.
+# Layered on top of requirements.txt. Pin torch to the CUDA build at deploy time.
+-r requirements.txt
+torch>=2.2
+transformers>=4.40
+sentencepiece>=0.2
+accelerate>=0.30
