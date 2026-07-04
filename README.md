@@ -9,6 +9,26 @@ and feels broken.
 **Vultr capability this proves:** GPU compute that actually sits *in* emerging-market regions —
 a latency profile no hyperscaler can match because they have almost no GPU presence there.
 
+## Getting started (no GPU needed)
+
+The whole app runs locally on the **CPU fallback** — a deterministic stub pipeline with
+realistic per-stage timing — so you can click through the real UI and WebSocket flow without
+any models or GPU. The real models load only when `MT_DEVICE=cuda` (or `MT_MODE=real`).
+
+```bash
+cp .env.example .env
+make install          # web deps + a Python venv for the server (fallback deps only)
+make server           # inference server on :8000  (fallback engine)
+make web              # Next.js app on :3000  (in another terminal)
+```
+
+Open http://localhost:3000, pick isiZulu → English, and start a call. The latency HUD shows
+the live per-turn round-trip and the STT → MT → TTS breakdown.
+
+- **Architecture & repo layout:** [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
+- **WebSocket wire contract:** [`docs/PROTOCOL.md`](./docs/PROTOCOL.md)
+- **Deploy the real pipeline on a Vultr GPU:** [`infra/RUNBOOK.md`](./infra/RUNBOOK.md)
+
 ## Cost estimate (tight budget)
 
 Designed to run on **hourly billing, torn down when idle** — deploy the GPU in **one** emerging-market
