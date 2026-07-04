@@ -11,3 +11,6 @@ ignore = ["E731"]  # we use a small lambda for ms() readability in pipeline.py
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# Put the server dir on sys.path so `import app` works under a bare `pytest`
+# invocation (CI + the Makefile), not just `python -m pytest`.
+pythonpath = ["."]
