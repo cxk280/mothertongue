@@ -16,3 +16,8 @@ export const SIM_USEAST_MS = num(process.env.NEXT_PUBLIC_SIM_USEAST_MS, 280);
 export function healthUrl(ws: string = WS_URL): string {
   return ws.replace(/^ws/, "http").replace(/\/ws$/, "/healthz");
 }
+
+/** Derive the two-way room WebSocket endpoint from the single-speaker WS URL. */
+export function roomUrl(ws: string = WS_URL): string {
+  return ws.replace(/\/ws$/, "/room");
+}

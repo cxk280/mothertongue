@@ -46,3 +46,32 @@ export interface ServerError {
   message: string;
 }
 export type ServerMessage = ServerReady | ServerTurn | ServerError;
+
+// ---- two-way room protocol (mirror of the /room endpoint) ----
+
+export interface ClientJoin {
+  type: "join";
+  room: string;
+  lang: string;
+}
+export interface ServerJoined {
+  type: "joined";
+  room: string;
+  self_lang: string;
+  region_label: string;
+  region_code: string;
+  engine: "real" | "fallback";
+}
+export interface ServerPeer {
+  type: "peer";
+  present: boolean;
+  lang: string | null;
+}
+export interface ServerSent {
+  type: "sent";
+  id: number;
+  src_text: string;
+  dst_text: string;
+  timings: Timings;
+}
+export type RoomServerMessage = ServerJoined | ServerPeer | ServerSent | ServerTurn | ServerError;
