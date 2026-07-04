@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: #0a0e14;
+  color: #e9eef3;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The app is a single dark "operations console"; never flash white. */
+body {
+  min-height: 100dvh;
+}
