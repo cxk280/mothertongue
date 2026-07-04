@@ -33,10 +33,12 @@ export interface CallState {
   micLevel: number;
   speaking: boolean;
   error: string | null;
+  startedAt: number | null;
   connect: () => void;
   startTalk: () => Promise<void>;
   stopTalk: () => void;
   hangup: () => void;
+  restart: () => void;
 }
 
 export function useCall(wsUrl: string, src: string, dst: string): CallState {
@@ -49,6 +51,7 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
   const [micLevel, setMicLevel] = useState(0);
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const micRef = useRef<MicCapture | null>(null);
@@ -63,6 +66,7 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
     if (wsRef.current) return;
     setStatus("connecting");
     setError(null);
+    setStartedAt(Date.now());
     const ws = new WebSocket(wsUrl);
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
@@ -149,6 +153,22 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
     setSpeaking(false);
   }, []);
 
+  // Tear down the current session and reconnect fresh — for "Start another call".
+  const restart = useCallback(() => {
+    micRef.current?.stop();
+    micRef.current = null;
+    wsRef.current?.close();
+    wsRef.current = null;
+    setTurns([]);
+    setLastRtt(null);
+    setLastTimings(null);
+    setError(null);
+    setSpeaking(false);
+    setMicLevel(0);
+    setEngine(null);
+    connect();
+  }, [connect]);
+
   // Clean up the socket + mic if the component unmounts mid-call.
   useEffect(() => {
     return () => {
@@ -167,9 +187,11 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
     micLevel,
     speaking,
     error,
+    startedAt,
     connect,
     startTalk,
     stopTalk,
     hangup,
+    restart,
   };
 }
