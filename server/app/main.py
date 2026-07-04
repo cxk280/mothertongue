@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
@@ -18,12 +19,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
 from .config import load_settings
-from .messages import ServerError, ServerReady
+from .messages import ServerError, ServerJoined, ServerPeer, ServerReady
 from .pipeline import Pipeline, build_pipeline
+from .rooms import Peer, RoomRegistry, relay
 
 logger = logging.getLogger("mothertongue")
 
 settings = load_settings()
+registry = RoomRegistry(settings)
 app = FastAPI(title="MotherTongue inference", version=__version__)
 app.add_middleware(
     CORSMiddleware,
@@ -111,6 +114,96 @@ async def ws_endpoint(ws: WebSocket) -> None:
             await _send(ws, ServerError(code="internal", message=str(exc)))
         except Exception:
             pass
+
+
+@app.websocket("/room")
+async def room_endpoint(ws: WebSocket) -> None:
+    """Two-way call: two peers in a room, each speaking their own language. A peer's
+    utterance is translated into the OTHER peer's language and voiced to them."""
+    await ws.accept()
+    room_id: str | None = None
+    peer_id: str | None = None
+    lang = ""
+    buffer = bytearray()
+
+    async def notify_presence(room, present: bool, lang_val: str | None, to_peer) -> None:
+        try:
+            await _send(to_peer.ws, ServerPeer(present=present, lang=lang_val))
+        except Exception:
+            pass
+
+    try:
+        while True:
+            event = await ws.receive()
+            if event["type"] == "websocket.disconnect":
+                break
+
+            if (data := event.get("bytes")) is not None:
+                buffer.extend(data)
+                continue
+
+            text = event.get("text")
+            if text is None:
+                continue
+            try:
+                msg = json.loads(text)
+            except json.JSONDecodeError:
+                await _send(ws, ServerError(code="bad_json", message="Invalid message"))
+                continue
+            kind = msg.get("type")
+
+            if kind == "join":
+                room_id = str(msg.get("room", "")).strip()
+                lang = msg.get("lang", "eng")
+                if not room_id:
+                    await _send(ws, ServerError(code="no_room", message="A room code is required"))
+                    continue
+                peer_id = uuid.uuid4().hex
+                buffer.clear()
+                room = registry.join(room_id, Peer(id=peer_id, lang=lang, ws=ws))
+                await _send(ws, ServerJoined(
+                    room=room_id, self_lang=lang,
+                    region_label=settings.region_label, region_code=settings.region_code,
+                    engine=room.pipeline.engine,
+                ))
+                other = room.other(peer_id)
+                if other is not None:
+                    await notify_presence(room, True, other.lang, room.peers[peer_id])
+                    await notify_presence(room, True, lang, other)
+
+            elif kind == "end_utterance":
+                room = registry.get(room_id) if room_id else None
+                pcm = bytes(buffer)
+                buffer.clear()
+                if room is None or room.other(peer_id) is None:
+                    await _send(ws, ServerError(code="alone", message="No one else has joined yet"))
+                    continue
+                if not pcm:
+                    continue
+                listener, turn, sent = await run_in_threadpool(relay, room, peer_id, pcm)
+                if listener is None:  # peer left mid-utterance
+                    continue
+                # Listener hears the translated audio; speaker gets a text-only echo.
+                await listener.ws.send_text(turn.model_dump_json())
+                await _send(ws, sent)
+
+            elif kind == "leave":
+                break
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:
+        logger.exception("room error")
+        try:
+            await _send(ws, ServerError(code="internal", message=str(exc)))
+        except Exception:
+            pass
+    finally:
+        if room_id and peer_id:
+            room = registry.leave(room_id, peer_id)
+            if room is not None:
+                for remaining in list(room.peers.values()):
+                    await notify_presence(room, False, None, remaining)
 
 
 async def _send(ws: WebSocket, model) -> None:
