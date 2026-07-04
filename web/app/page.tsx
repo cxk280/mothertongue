@@ -4,6 +4,7 @@
 // start a call. Only São Paulo / isiZulu <-> English is wired in this increment.
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { LANGUAGES, REGIONS } from "@/lib/data";
@@ -119,18 +120,9 @@ export default function Landing() {
         Start call
       </button>
 
-      <details className="text-center">
-        <summary className="cursor-pointer list-none text-sm font-medium text-mt-secondary">
-          How this works ›
-        </summary>
-        <p className="mt-3 text-left text-[13px] leading-5 text-mt-secondary">
-          Your speech is transcribed, translated, and re-voiced on a GPU physically in{" "}
-          <span className="text-mt-green">São Paulo</span> — all three stages in-region. Because
-          the compute is milliseconds away instead of an ocean away, the reply comes back fast
-          enough to feel like a real conversation. The number above is the live round-trip to that
-          region.
-        </p>
-      </details>
+      <Link href="/about" className="text-center text-sm font-medium text-mt-secondary">
+        How this works ›
+      </Link>
     </main>
   );
 }
