@@ -24,3 +24,6 @@ out/
 
 # Logs
 *.log
+
+# Infra runtime state
+infra/.instance-id
