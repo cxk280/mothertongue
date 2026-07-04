@@ -3,9 +3,10 @@
 // The Call screen: push-to-talk in the source language, hear the translation back,
 // with the latency HUD as the hero. Single-speaker in this increment.
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { CompareRace } from "@/components/CompareRace";
 import { LatencyHud } from "@/components/LatencyHud";
 import { Transcript } from "@/components/Transcript";
 import { Waveform } from "@/components/Waveform";
@@ -29,11 +30,14 @@ function CallInner() {
   const region = params.get("region") ?? "sao";
 
   const call = useCall(WS_URL, src, dst);
+  const [showCompare, setShowCompare] = useState(false);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => call.connect(), []);
 
   const regionLabel = call.regionLabel || regionByCode(region).label;
+  const lastTurn = call.turns[call.turns.length - 1];
+  const canCompare = lastTurn != null && call.lastRtt != null && call.lastTimings != null;
 
   const endCall = () => {
     call.hangup();
@@ -64,12 +68,21 @@ function CallInner() {
 
       {/* Controls */}
       <div className="flex flex-col gap-4 border-t border-mt-subtle bg-mt-surface px-5 pb-8 pt-4">
-        <div className="flex w-full items-center justify-center gap-2 rounded-xl border border-mt-subtle bg-mt-base py-3 text-mt-muted">
-          <span className="text-[15px] font-medium">Compare to US-East</span>
-          <span className="rounded-full bg-mt-elevated px-2 py-0.5 text-[10px] font-semibold tracking-wide">
-            SOON
-          </span>
-        </div>
+        <button
+          onClick={() => canCompare && setShowCompare(true)}
+          disabled={!canCompare}
+          className={`flex w-full items-center justify-center gap-2 rounded-xl border py-3 transition-transform active:scale-[0.99] ${
+            canCompare ? "border-mt-amber bg-mt-base text-mt-amber" : "border-mt-subtle text-mt-muted"
+          }`}
+        >
+          <BoltIcon />
+          <span className="text-[15px] font-semibold">Compare to US-East</span>
+          {!canCompare && (
+            <span className="rounded-full bg-mt-elevated px-2 py-0.5 text-[10px] font-semibold tracking-wide">
+              AFTER 1 TURN
+            </span>
+          )}
+        </button>
         <div className="flex items-center justify-center gap-7">
           <button
             onClick={endCall}
@@ -132,6 +145,17 @@ function CallInner() {
           </div>
         </Overlay>
       )}
+
+      {/* Compare / Race overlay */}
+      {showCompare && canCompare && (
+        <CompareRace
+          regionLabel={regionLabel}
+          inRegionRttMs={call.lastRtt as number}
+          computeMs={(call.lastTimings as NonNullable<typeof call.lastTimings>).total_ms}
+          utterance={lastTurn.dstText}
+          onClose={() => setShowCompare(false)}
+        />
+      )}
     </main>
   );
 }
@@ -163,6 +187,13 @@ function BackIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
       <path d="m15 6-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function BoltIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" />
     </svg>
   );
 }
