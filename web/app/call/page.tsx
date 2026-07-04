@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { CompareRace } from "@/components/CompareRace";
 import { LatencyHud } from "@/components/LatencyHud";
+import { SessionSummary } from "@/components/SessionSummary";
 import { Transcript } from "@/components/Transcript";
 import { Waveform } from "@/components/Waveform";
 import { regionByCode } from "@/lib/data";
@@ -31,6 +32,8 @@ function CallInner() {
 
   const call = useCall(WS_URL, src, dst);
   const [showCompare, setShowCompare] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
+  const [summaryDurationMs, setSummaryDurationMs] = useState(0);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => call.connect(), []);
@@ -39,9 +42,21 @@ function CallInner() {
   const lastTurn = call.turns[call.turns.length - 1];
   const canCompare = lastTurn != null && call.lastRtt != null && call.lastTimings != null;
 
-  const endCall = () => {
+  const goHome = () => {
     call.hangup();
     router.push("/");
+  };
+
+  // End the call: show the session summary if there's anything to recap; else leave.
+  const endCall = () => {
+    const durationMs = call.startedAt ? Date.now() - call.startedAt : 0;
+    call.hangup();
+    if (call.turns.length > 0) {
+      setSummaryDurationMs(durationMs);
+      setShowSummary(true);
+    } else {
+      router.push("/");
+    }
   };
 
   return (
@@ -85,8 +100,8 @@ function CallInner() {
         </button>
         <div className="flex items-center justify-center gap-7">
           <button
-            onClick={endCall}
-            aria-label="Back"
+            onClick={goHome}
+            aria-label="Leave"
             className="flex h-[52px] w-[52px] items-center justify-center rounded-full border border-mt-strong bg-mt-elevated text-mt-secondary"
           >
             <BackIcon />
@@ -154,6 +169,22 @@ function CallInner() {
           computeMs={(call.lastTimings as NonNullable<typeof call.lastTimings>).total_ms}
           utterance={lastTurn.dstText}
           onClose={() => setShowCompare(false)}
+        />
+      )}
+
+      {/* Session summary overlay (after End call) */}
+      {showSummary && (
+        <SessionSummary
+          regionLabel={regionLabel}
+          src={src}
+          dst={dst}
+          durationMs={summaryDurationMs}
+          turns={call.turns}
+          onStartAnother={() => {
+            setShowSummary(false);
+            call.restart();
+          }}
+          onHome={() => router.push("/")}
         />
       )}
     </main>
