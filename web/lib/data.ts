@@ -34,3 +34,23 @@ export function languageLabel(code: string): string {
 export function regionByCode(code: string): Region {
   return REGIONS.find((r) => r.code === code) ?? REGIONS[0];
 }
+
+// Simulated connection profiles for the weak-network presenter demo. These are
+// illustrative figures shown in the UI — they do NOT actually throttle the socket.
+export interface NetworkProfile {
+  id: string;
+  label: string;
+  bitrateKbps: number | null; // null = no throttle ("Off")
+  lossPct: number;
+}
+
+export const NETWORK_PROFILES: NetworkProfile[] = [
+  { id: "off", label: "Off", bitrateKbps: null, lossPct: 0 },
+  { id: "3g", label: "3G", bitrateKbps: 180, lossPct: 4 },
+  { id: "2g", label: "2G", bitrateKbps: 48, lossPct: 9 },
+  { id: "lossy", label: "Lossy", bitrateKbps: 120, lossPct: 18 },
+];
+
+export function networkProfile(id: string): NetworkProfile {
+  return NETWORK_PROFILES.find((p) => p.id === id) ?? NETWORK_PROFILES[0];
+}

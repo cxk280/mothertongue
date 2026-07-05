@@ -7,9 +7,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { LANGUAGES, REGIONS } from "@/lib/data";
+import { WeakNetworkOverlay } from "@/components/WeakNetworkOverlay";
+import { LANGUAGES, REGIONS, networkProfile } from "@/lib/data";
 import { healthUrl } from "@/lib/env";
 import { latencyTier, tierClasses } from "@/lib/format";
+import { formatNetworkChip } from "@/lib/network";
 
 export default function Landing() {
   const router = useRouter();
@@ -17,6 +19,8 @@ export default function Landing() {
   const [src, setSrc] = useState("zul");
   const [dst, setDst] = useState("eng");
   const [ping, setPing] = useState<number | null>(null);
+  const [netId, setNetId] = useState("off");
+  const [showNet, setShowNet] = useState(false);
 
   // Measure the real round-trip to the in-region health endpoint.
   useEffect(() => {
@@ -107,11 +111,18 @@ export default function Landing() {
         <LangField label="THEY SPEAK" value={dst} onChange={setDst} />
       </section>
 
-      {/* Network chip (visual; throttle is a later increment) */}
-      <div className="flex items-center justify-between rounded-xl border border-mt-subtle bg-mt-surface px-3.5 py-3">
-        <span className="text-[13px] font-medium text-mt-secondary">Network: auto-detected</span>
-        <span className="text-[11px] text-mt-muted">throttle · soon</span>
-      </div>
+      {/* Network chip — opens the simulated weak-network demo */}
+      <button
+        onClick={() => setShowNet(true)}
+        className={`flex items-center justify-between rounded-xl border bg-mt-surface px-3.5 py-3 ${
+          netId === "off" ? "border-mt-subtle" : "border-mt-amber"
+        }`}
+      >
+        <span className={`text-[13px] font-medium ${netId === "off" ? "text-mt-secondary" : "text-mt-amber"}`}>
+          {formatNetworkChip(networkProfile(netId))}
+        </span>
+        <span className="text-[11px] font-semibold text-mt-muted">{netId === "off" ? "Simulate" : "Change"}</span>
+      </button>
 
       <button
         onClick={start}
@@ -123,6 +134,10 @@ export default function Landing() {
       <Link href="/about" className="text-center text-sm font-medium text-mt-secondary">
         How this works ›
       </Link>
+
+      {showNet && (
+        <WeakNetworkOverlay activeId={netId} onApply={setNetId} onClose={() => setShowNet(false)} />
+      )}
     </main>
   );
 }
