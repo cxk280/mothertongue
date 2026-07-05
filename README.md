@@ -9,6 +9,27 @@ and feels broken.
 **Vultr capability this proves:** GPU compute that actually sits *in* emerging-market regions —
 a latency profile no hyperscaler can match because they have almost no GPU presence there.
 
+## What's built
+
+A full mobile-first web app (dark "operations console" UI) over a streaming STT → MT → TTS
+pipeline, with the **live latency HUD as the hero** on every relevant screen:
+
+- **Landing** — pick serving region + language pair, see the real in-region ping.
+- **Call** — single-speaker push-to-talk: speak your language, hear the translation back; live
+  round-trip + STT/MT/TTS breakdown in the HUD.
+- **Two-way call** — a room you share by link; two people each speak their own language and hear
+  the other translated in real time (`/room/<code>`).
+- **Compare / Race** — the same utterance raced against a (clearly simulated) US-East path — the
+  "~10× faster" moment.
+- **Session Summary** — post-call recap: duration, median/p95 in-region latency, transcript.
+- **About**, **Weak-network demo overlay**, and the connecting / error / empty / reconnecting states.
+
+Both call flows are hardened for weak networks: the WebSocket **auto-reconnects with exponential
+backoff**, the server caps an over-long utterance, and the UI supports **hold-Space push-to-talk**,
+dialog semantics, and `prefers-reduced-motion`.
+
+Everything runs on a **CPU fallback** today; the real models run when deployed to a GPU (below).
+
 ## Getting started (no GPU needed)
 
 The whole app runs locally on the **CPU fallback** — a deterministic stub pipeline with
@@ -23,7 +44,9 @@ make web              # Next.js app on :3000  (in another terminal)
 ```
 
 Open http://localhost:3000, pick isiZulu → English, and start a call. The latency HUD shows
-the live per-turn round-trip and the STT → MT → TTS breakdown.
+the live per-turn round-trip and the STT → MT → TTS breakdown. To try the **two-way** flow,
+hit "Start a two-way call", then open the shared `/room/<code>` link in a second tab (or on
+another device) and pick the other language.
 
 - **Architecture & repo layout:** [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
 - **WebSocket wire contract:** [`docs/PROTOCOL.md`](./docs/PROTOCOL.md)
