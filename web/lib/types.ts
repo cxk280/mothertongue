@@ -9,10 +9,14 @@ export interface ClientStart {
 export interface ClientEndUtterance {
   type: "end_utterance";
 }
+export interface ClientTranslateText {
+  type: "translate_text";
+  text: string;
+}
 export interface ClientStop {
   type: "stop";
 }
-export type ClientMessage = ClientStart | ClientEndUtterance | ClientStop;
+export type ClientMessage = ClientStart | ClientEndUtterance | ClientTranslateText | ClientStop;
 
 export interface Timings {
   stt_ms: number;
