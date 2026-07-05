@@ -30,6 +30,30 @@ def test_ws_start_utterance_turn_roundtrip():
         ws.send_text(json.dumps({"type": "stop"}))
 
 
+def test_ws_translate_text_roundtrip():
+    # Typed input skips STT: start -> translate_text -> a normal turn with stt_ms == 0,
+    # the typed text echoed as src, and a real translation + audio back.
+    client = TestClient(app)
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text(json.dumps({"type": "start", "src": "zul", "dst": "eng"}))
+        assert ws.receive_json()["type"] == "ready"
+        ws.send_text(json.dumps({"type": "translate_text", "text": "Sawubona"}))
+        turn = ws.receive_json()
+        assert turn["type"] == "turn"
+        assert turn["src_text"] == "Sawubona"  # the typed text, echoed
+        assert turn["dst_text"] and turn["audio_b64"]
+        assert turn["timings"]["stt_ms"] == 0
+        ws.send_text(json.dumps({"type": "stop"}))
+
+
+def test_ws_translate_text_before_start_errors():
+    client = TestClient(app)
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text(json.dumps({"type": "translate_text", "text": "hi"}))
+        msg = ws.receive_json()
+        assert msg["type"] == "error" and msg["code"] == "not_started"
+
+
 def test_ws_end_before_start_errors():
     client = TestClient(app)
     with client.websocket_connect("/ws") as ws:

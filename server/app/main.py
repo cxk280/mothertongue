@@ -109,6 +109,17 @@ async def ws_endpoint(ws: WebSocket) -> None:
                 turn = await run_in_threadpool(pipeline.run, pcm, src, dst)
                 await ws.send_text(turn.model_dump_json())
 
+            elif kind == "translate_text":
+                # Typed input instead of speech: translate+speak the text, skipping STT.
+                if pipeline is None:
+                    await _send(ws, ServerError(code="not_started", message="Send start first"))
+                    continue
+                typed = (msg.get("text") or "").strip()
+                if not typed:
+                    continue
+                turn = await run_in_threadpool(pipeline.run_text, typed, src, dst)
+                await ws.send_text(turn.model_dump_json())
+
             elif kind == "stop":
                 break
 

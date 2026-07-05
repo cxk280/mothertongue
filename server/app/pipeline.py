@@ -79,6 +79,36 @@ class Pipeline:
             audio_b64=base64.b64encode(wav).decode("ascii"),
         )
 
+    def run_text(self, text: str, src: str, dst: str) -> ServerTurn:
+        """Translate typed text (no audio): MT -> TTS, skipping STT. Same ServerTurn
+        shape as run(), with stt_ms = 0, so the browser renders it identically."""
+        with self._lock:
+            t0 = time.perf_counter()
+            dst_text = self._mt.translate(text, src, dst)
+            t1 = time.perf_counter()
+            wav, _sr = self._tts.synthesize(dst_text, dst)
+            t2 = time.perf_counter()
+
+            self._turn_id += 1
+            turn_id = self._turn_id
+
+        ms = lambda a, b: round((b - a) * 1000, 1)  # noqa: E731
+        timings = Timings(
+            stt_ms=0.0,
+            mt_ms=ms(t0, t1),
+            tts_ms=ms(t1, t2),
+            total_ms=ms(t0, t2),
+        )
+        return ServerTurn(
+            id=turn_id,
+            src_lang=src,
+            dst_lang=dst,
+            src_text=text,
+            dst_text=dst_text,
+            timings=timings,
+            audio_b64=base64.b64encode(wav).decode("ascii"),
+        )
+
 
 def build_pipeline(settings: Settings) -> Pipeline:
     """Build a per-connection pipeline. Heavy models (if any) are shared via the

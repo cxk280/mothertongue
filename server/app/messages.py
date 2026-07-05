@@ -24,6 +24,12 @@ class ClientEndUtterance(BaseModel):
     type: Literal["end_utterance"] = "end_utterance"
 
 
+class ClientTranslateText(BaseModel):
+    """Typed input instead of speech: translate+speak the text, skipping STT."""
+    type: Literal["translate_text"] = "translate_text"
+    text: str
+
+
 class ClientStop(BaseModel):
     type: Literal["stop"] = "stop"
 
