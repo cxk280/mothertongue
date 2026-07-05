@@ -41,6 +41,7 @@ export default function Landing() {
   };
 
   const start = () => router.push(`/call?src=${src}&dst=${dst}&region=${region}`);
+  const watchSample = () => router.push(`/call?src=zul&dst=eng&region=${region}&sample=1`);
   const startTwoWay = () => router.push(`/room/${newRoomCode()}?lang=${src}`);
 
   const tier = ping != null ? latencyTier(ping) : "good";
@@ -138,6 +139,10 @@ export default function Landing() {
         className="rounded-2xl border border-mt-strong py-3.5 text-[15px] font-semibold text-mt-secondary transition-transform active:scale-[0.99]"
       >
         Start a two-way call →
+      </button>
+
+      <button onClick={watchSample} className="text-center text-sm font-medium text-mt-green">
+        ▶ Watch a sample call <span className="text-mt-muted">(no mic)</span>
       </button>
 
       <Link href="/about" className="text-center text-sm font-medium text-mt-secondary">

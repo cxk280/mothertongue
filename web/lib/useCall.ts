@@ -40,6 +40,7 @@ export interface CallState {
   connect: () => void;
   startTalk: () => Promise<void>;
   stopTalk: () => void;
+  sampleUtterance: () => void;
   hangup: () => void;
   restart: () => void;
 }
@@ -198,6 +199,17 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
     wsRef.current = null;
   };
 
+  // Drive one utterance without the mic — for the no-mic "sample call". The audio
+  // is silence; the fallback engine scripts the conversation from it. (On the real
+  // engine this would transcribe silence, so callers gate this to the fallback.)
+  const sampleUtterance = useCallback(() => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(new Int16Array(4000).buffer); // ~0.25s of silence
+    talkEndRef.current = performance.now();
+    ws.send(JSON.stringify({ type: "end_utterance" }));
+  }, []);
+
   const hangup = useCallback(() => {
     send({ type: "stop" });
     teardown();
@@ -244,6 +256,7 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
     connect,
     startTalk,
     stopTalk,
+    sampleUtterance,
     hangup,
     restart,
   };
