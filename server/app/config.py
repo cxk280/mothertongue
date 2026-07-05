@@ -40,6 +40,11 @@ class Settings:
     # grow the buffer without bound. Default ~90s of PCM16 @ 16kHz mono.
     max_utterance_bytes: int = int(_env("MT_MAX_UTTERANCE_BYTES", str(16000 * 2 * 90)))
 
+    # Opt-in WebRTC transport (Opus uplink over an aiortc peer connection). Off by
+    # default so the base server needs nothing beyond the wheel-only deps; when on,
+    # aiortc must be installed. The WebSocket transport is always available.
+    webrtc_enabled: bool = _env("MT_WEBRTC", "0") not in ("0", "false", "")
+
     @property
     def force_fallback(self) -> bool:
         return self.mode == "fallback"

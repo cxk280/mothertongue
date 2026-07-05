@@ -21,3 +21,12 @@ export function healthUrl(ws: string = WS_URL): string {
 export function roomUrl(ws: string = WS_URL): string {
   return ws.replace(/\/ws$/, "/room");
 }
+
+// Opt-in WebRTC transport (Opus uplink). Off unless NEXT_PUBLIC_WEBRTC=1; the
+// WebSocket transport is always the default so nothing regresses.
+export const WEBRTC_ENABLED = process.env.NEXT_PUBLIC_WEBRTC === "1";
+
+/** Derive the WebRTC signaling endpoint (HTTP POST) from the WS URL. */
+export function offerUrl(ws: string = WS_URL): string {
+  return ws.replace(/^ws/, "http").replace(/\/ws$/, "/webrtc/offer");
+}

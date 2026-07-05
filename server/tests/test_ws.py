@@ -54,4 +54,14 @@ def test_healthz():
     client = TestClient(app)
     r = client.get("/healthz")
     assert r.status_code == 200
-    assert r.json()["status"] == "ok"
+    body = r.json()
+    assert body["status"] == "ok"
+    assert body["webrtc"] is False  # opt-in transport is off by default
+
+
+def test_webrtc_offer_404_when_disabled():
+    # The opt-in WebRTC signaling endpoint is absent unless MT_WEBRTC is set — the WS
+    # transport is the default. (The enabled path is covered live by test_webrtc.py.)
+    client = TestClient(app)
+    r = client.post("/webrtc/offer", json={"sdp": "x", "type": "offer"})
+    assert r.status_code == 404
