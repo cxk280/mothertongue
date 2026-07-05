@@ -145,6 +145,11 @@ async def room_endpoint(ws: WebSocket) -> None:
 
             if (data := event.get("bytes")) is not None:
                 buffer.extend(data)
+                if len(buffer) > settings.max_utterance_bytes:
+                    buffer.clear()
+                    await _send(ws, ServerError(
+                        code="too_long", message="Utterance too long — please release the mic"
+                    ))
                 continue
 
             text = event.get("text")

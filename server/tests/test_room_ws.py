@@ -20,6 +20,16 @@ def test_join_requires_a_room_code():
         assert err["type"] == "error" and err["code"] == "no_room"
 
 
+def test_room_overlong_utterance_is_capped():
+    client = TestClient(app)
+    with client.websocket_connect("/room") as a:
+        a.send_text(json.dumps({"type": "join", "room": "r", "lang": "zul"}))
+        assert a.receive_json()["type"] == "joined"
+        a.send_bytes(bytes(70000))  # exceeds the (test) 64000-byte cap
+        msg = a.receive_json()
+        assert msg["type"] == "error" and msg["code"] == "too_long"
+
+
 def test_speaking_alone_reports_no_peer():
     client = TestClient(app)
     with client.websocket_connect("/room") as a:

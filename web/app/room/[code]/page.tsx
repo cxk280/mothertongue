@@ -100,6 +100,16 @@ function RoomCall({ code, lang }: { code: string; lang: string }) {
         timings={room.lastTimings}
       />
 
+      {room.reconnecting && (
+        <div
+          role="status"
+          className="flex items-center justify-center gap-2 bg-mt-amber/15 py-2 text-[13px] font-medium text-mt-amber"
+        >
+          <span className="h-3 w-3 animate-spin rounded-full border-2 border-mt-amber/40 border-t-mt-amber" />
+          Reconnecting to {regionLabel}…
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto">
         {room.status !== "active" ? (
           <div className="flex flex-col items-center gap-4 px-6 py-12 text-center">
