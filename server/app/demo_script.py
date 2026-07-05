@@ -20,9 +20,12 @@ LINES = [
 
 
 def line_for(index: int, lang: str) -> str:
-    """Source-language text for the Nth utterance (cycles if we run past the end)."""
+    """Source-language text for the Nth utterance (cycles if we run past the end).
+
+    Only the flagship isiZulu/English pair is scripted; other languages get an
+    honest placeholder (the real STT runs on the GPU path)."""
     row = LINES[index % len(LINES)]
-    return row.get(lang) or f"(demo utterance {index + 1})"
+    return row.get(lang) or "· sample audio ·"
 
 
 def translate_pair(text: str, src: str, dst: str) -> str | None:

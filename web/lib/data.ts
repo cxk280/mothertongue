@@ -22,8 +22,18 @@ export const REGIONS: Region[] = [
   { code: "bom", label: "Mumbai", sub: "India · ap-south", badge: "MU", live: false },
 ];
 
+// Curated low-resource languages supported across the whole pipeline
+// (MMS-ASR adapters + NLLB-200 + MMS-TTS voices). isiZulu ↔ English is the
+// flagship pair the CPU-fallback demo scripts; the rest run on the real GPU path.
 export const LANGUAGES: Language[] = [
   { code: "zul", label: "isiZulu (Zulu)" },
+  { code: "xho", label: "isiXhosa (Xhosa)" },
+  { code: "yor", label: "Yorùbá" },
+  { code: "hau", label: "Hausa" },
+  { code: "ibo", label: "Igbo" },
+  { code: "swh", label: "Kiswahili (Swahili)" },
+  { code: "amh", label: "Amharic (አማርኛ)" },
+  { code: "afr", label: "Afrikaans" },
   { code: "eng", label: "English" },
 ];
 

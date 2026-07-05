@@ -15,9 +15,18 @@ from . import demo_script
 from .config import Settings
 
 # NLLB uses BCP-47-ish "<iso3>_<Script>" codes. Map the pipeline's iso3 codes.
+# iso3 -> NLLB "<iso3>_<Script>". Most are Latin; Amharic is Ethiopic. Unlisted
+# languages fall back to Latin (see _nllb_code), which is right for most.
 _NLLB_CODE = {
     "eng": "eng_Latn",
     "zul": "zul_Latn",
+    "xho": "xho_Latn",
+    "yor": "yor_Latn",
+    "hau": "hau_Latn",
+    "ibo": "ibo_Latn",
+    "swh": "swh_Latn",
+    "afr": "afr_Latn",
+    "amh": "amh_Ethi",
 }
 
 
@@ -33,7 +42,9 @@ class FallbackMT:
         if self._settings.fallback_sleep:
             time.sleep(min(0.20, 0.02 + len(text) * 0.002))
         scripted = demo_script.translate_pair(text, src, dst)
-        return scripted if scripted is not None else f"[{dst}] {text}"
+        # The fallback only scripts the flagship isiZulu <-> English pair; other
+        # pairs get an honest placeholder (they translate for real on the GPU path).
+        return scripted if scripted is not None else "· translated on the in-region GPU ·"
 
 
 @lru_cache(maxsize=1)
