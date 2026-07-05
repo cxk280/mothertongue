@@ -12,10 +12,12 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from . import __version__
 from .config import load_settings
@@ -27,7 +29,21 @@ logger = logging.getLogger("mothertongue")
 
 settings = load_settings()
 registry = RoomRegistry(settings)
-app = FastAPI(title="MotherTongue inference", version=__version__)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    yield
+    # Tear down any live WebRTC peer connections on shutdown.
+    if settings.webrtc_enabled:
+        try:
+            from .webrtc import close_all_sessions
+            await close_all_sessions()
+        except Exception:
+            pass
+
+
+app = FastAPI(title="MotherTongue inference", version=__version__, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # demo service; tighten per-deployment if exposed publicly
@@ -45,7 +61,27 @@ async def healthz() -> dict:
         "region_code": settings.region_code,
         "mode": settings.mode,
         "device": settings.device,
+        "webrtc": settings.webrtc_enabled,
     }
+
+
+class WebrtcOffer(BaseModel):
+    sdp: str
+    type: str
+
+
+@app.post("/webrtc/offer")
+async def webrtc_offer(offer: WebrtcOffer) -> dict:
+    """Signaling for the opt-in WebRTC transport: take the browser's SDP offer and
+    return our answer. aiortc is imported lazily so the base server needs it only here."""
+    if not settings.webrtc_enabled:
+        raise HTTPException(status_code=404, detail="WebRTC transport is disabled")
+    try:
+        from .webrtc import create_session
+    except Exception as exc:  # aiortc / native deps not installed
+        logger.exception("webrtc import failed")
+        raise HTTPException(status_code=503, detail=f"WebRTC unavailable: {exc}") from exc
+    return await create_session(offer.sdp, offer.type, settings)
 
 
 @app.websocket("/ws")
