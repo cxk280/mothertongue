@@ -12,6 +12,7 @@ import { LANGUAGES, REGIONS, networkProfile } from "@/lib/data";
 import { healthUrl } from "@/lib/env";
 import { latencyTier, tierClasses } from "@/lib/format";
 import { formatNetworkChip } from "@/lib/network";
+import { newRoomCode } from "@/lib/room";
 
 export default function Landing() {
   const router = useRouter();
@@ -40,6 +41,7 @@ export default function Landing() {
   };
 
   const start = () => router.push(`/call?src=${src}&dst=${dst}&region=${region}`);
+  const startTwoWay = () => router.push(`/room/${newRoomCode()}?lang=${src}`);
 
   const tier = ping != null ? latencyTier(ping) : "good";
   const tc = tierClasses(tier);
@@ -129,6 +131,13 @@ export default function Landing() {
         className="rounded-2xl bg-mt-green py-4 text-[17px] font-bold text-mt-base transition-transform active:scale-[0.99]"
       >
         Start call
+      </button>
+
+      <button
+        onClick={startTwoWay}
+        className="rounded-2xl border border-mt-strong py-3.5 text-[15px] font-semibold text-mt-secondary transition-transform active:scale-[0.99]"
+      >
+        Start a two-way call →
       </button>
 
       <Link href="/about" className="text-center text-sm font-medium text-mt-secondary">

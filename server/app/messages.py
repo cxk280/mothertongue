@@ -63,3 +63,36 @@ class ServerError(BaseModel):
     type: Literal["error"] = "error"
     code: str
     message: str
+
+
+# ---- two-way room protocol (see /room endpoint) ----
+
+class ClientJoin(BaseModel):
+    type: Literal["join"] = "join"
+    room: str
+    lang: str  # the language THIS peer speaks
+
+
+class ServerJoined(BaseModel):
+    type: Literal["joined"] = "joined"
+    room: str
+    self_lang: str
+    region_label: str
+    region_code: str
+    engine: str
+
+
+class ServerPeer(BaseModel):
+    """The other peer's presence in the room (sent when they join or leave)."""
+    type: Literal["peer"] = "peer"
+    present: bool
+    lang: str | None = None
+
+
+class ServerSent(BaseModel):
+    """Echo of a peer's own outgoing utterance (no audio — they already spoke it)."""
+    type: Literal["sent"] = "sent"
+    id: int
+    src_text: str
+    dst_text: str
+    timings: Timings
