@@ -147,6 +147,8 @@ function CallView({ call, src, dst, region, sample }: { call: CallState } & Tran
 
   return (
     <main className="relative mx-auto flex min-h-dvh w-full max-w-[420px] flex-col bg-mt-base">
+      {/* Landmark heading for screen-reader / heading navigation (visually hidden). */}
+      <h1 className="sr-only">In-region translation call</h1>
       <LatencyHud
         regionLabel={regionLabel}
         engine={call.engine}
@@ -181,7 +183,7 @@ function CallView({ call, src, dst, region, sample }: { call: CallState } & Tran
       )}
 
       <div className="flex-1 overflow-y-auto">
-        <Transcript turns={call.turns} />
+        <Transcript turns={call.turns} mode={mode} />
       </div>
 
       {/* Speaking indicator */}

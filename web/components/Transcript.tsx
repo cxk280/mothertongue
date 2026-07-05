@@ -43,20 +43,27 @@ function TurnCard({ turn, emphasized }: { turn: UiTurn; emphasized: boolean }) {
   );
 }
 
-export function Transcript({ turns }: { turns: UiTurn[] }) {
-  if (turns.length === 0) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-16 text-center">
-        <p className="text-lg font-bold text-mt-primary">Tap and speak to begin</p>
-        <p className="text-[13px] text-mt-secondary">Your words are translated the moment you stop</p>
-      </div>
-    );
-  }
+export function Transcript({ turns, mode = "voice" }: { turns: UiTurn[]; mode?: "voice" | "text" }) {
+  const empty =
+    mode === "text"
+      ? { title: "Type something to begin", sub: "Your text is translated the moment you send" }
+      : { title: "Tap and speak to begin", sub: "Your words are translated the moment you stop" };
   return (
-    <div className="flex flex-col gap-3.5 px-5 py-4">
-      {turns.map((turn, i) => (
-        <TurnCard key={turn.id} turn={turn} emphasized={i === turns.length - 1} />
-      ))}
+    // role=log + aria-live must be present *before* a turn lands, so the first translation
+    // is announced too — keep this region persistent across the empty and populated states.
+    <div className="flex flex-1 flex-col" role="log" aria-live="polite" aria-label="Translation transcript">
+      {turns.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-16 text-center">
+          <p className="text-lg font-bold text-mt-primary">{empty.title}</p>
+          <p className="text-[13px] text-mt-secondary">{empty.sub}</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3.5 px-5 py-4">
+          {turns.map((turn, i) => (
+            <TurnCard key={turn.id} turn={turn} emphasized={i === turns.length - 1} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

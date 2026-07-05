@@ -28,3 +28,5 @@ out/
 # Infra runtime state
 infra/.instance-id
 docs/EDGE_CASES.md
+docs/USERS.md
+docs/USER_PERSONAS_FINDING.md
