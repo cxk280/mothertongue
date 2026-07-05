@@ -3,7 +3,7 @@
 // The Call screen: push-to-talk in the source language, hear the translation back,
 // with the latency HUD as the hero. Single-speaker in this increment.
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { CompareRace } from "@/components/CompareRace";
@@ -29,14 +29,33 @@ function CallInner() {
   const src = params.get("src") ?? "zul";
   const dst = params.get("dst") ?? "eng";
   const region = params.get("region") ?? "sao";
+  const sample = params.get("sample") === "1";
 
   const call = useCall(WS_URL, src, dst);
   const [showCompare, setShowCompare] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [summaryDurationMs, setSummaryDurationMs] = useState(0);
+  const sampleStarted = useRef(false);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => call.connect(), []);
+
+  // "Watch a sample call": auto-drive the scripted conversation with no mic. Only on
+  // the fallback engine (it scripts from silence); the real engine needs real speech.
+  useEffect(() => {
+    if (!sample || call.status !== "ready" || call.engine !== "fallback") return;
+    if (sampleStarted.current) return;
+    sampleStarted.current = true;
+    const TURNS = 4;
+    let n = 0;
+    const tick = () => {
+      call.sampleUtterance();
+      n += 1;
+      if (n < TURNS) timer = window.setTimeout(tick, 2600);
+    };
+    let timer = window.setTimeout(tick, 600);
+    return () => clearTimeout(timer);
+  }, [sample, call.status, call.engine, call.sampleUtterance]);
 
   // Keyboard: hold Space to talk (accessibility alternative to the mic button);
   // Escape closes the Compare overlay.
@@ -104,6 +123,15 @@ function CallInner() {
         >
           <span className="h-3 w-3 animate-spin rounded-full border-2 border-mt-amber/40 border-t-mt-amber" />
           Reconnecting to {regionLabel}…
+        </div>
+      )}
+
+      {sample && call.engine === "fallback" && (
+        <div
+          role="status"
+          className="flex items-center justify-center gap-2 bg-mt-greenDim py-2 text-[12px] font-semibold tracking-wide text-mt-green"
+        >
+          ▶ SAMPLE CALL · auto-playing, no mic needed
         </div>
       )}
 
