@@ -17,3 +17,16 @@ body {
 body {
   min-height: 100dvh;
 }
+
+/* Respect users who prefer reduced motion — neutralize spinners, the waveform,
+   and progress-bar transitions rather than animating them. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

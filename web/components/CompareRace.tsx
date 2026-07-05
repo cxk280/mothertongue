@@ -48,7 +48,7 @@ export function CompareRace({ regionLabel, inRegionRttMs, computeMs, utterance, 
   const replay = () => setRunKey((k) => k + 1);
 
   return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-mt-base">
+    <div role="dialog" aria-modal="true" aria-label="Compare in-region vs US-East" className="absolute inset-0 z-20 overflow-y-auto bg-mt-base">
       <div className="mx-auto flex min-h-full w-full max-w-[420px] flex-col gap-[18px] px-5 pb-8 pt-12">
         <header className="flex items-center justify-between">
           <div>

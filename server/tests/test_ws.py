@@ -39,6 +39,17 @@ def test_ws_end_before_start_errors():
         assert msg["code"] == "not_started"
 
 
+def test_overlong_utterance_is_capped():
+    client = TestClient(app)
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text(json.dumps({"type": "start", "src": "zul", "dst": "eng"}))
+        assert ws.receive_json()["type"] == "ready"
+        # Exceed the (test) 64000-byte cap in one frame.
+        ws.send_bytes(bytes(70000))
+        msg = ws.receive_json()
+        assert msg["type"] == "error" and msg["code"] == "too_long"
+
+
 def test_healthz():
     client = TestClient(app)
     r = client.get("/healthz")
