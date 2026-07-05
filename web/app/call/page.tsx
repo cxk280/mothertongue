@@ -57,7 +57,15 @@ function CallView({ call, src, dst, region, sample }: { call: CallState } & Tran
   const [showCompare, setShowCompare] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [summaryDurationMs, setSummaryDurationMs] = useState(0);
+  const [mode, setMode] = useState<"voice" | "text">("voice");
+  const [draft, setDraft] = useState("");
   const sampleStarted = useRef(false);
+
+  const submitText = () => {
+    if (call.status !== "ready" || !draft.trim()) return;
+    call.translateText(draft);
+    setDraft("");
+  };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => call.connect(), []);
@@ -88,6 +96,7 @@ function CallView({ call, src, dst, region, sample }: { call: CallState } & Tran
     };
     const down = (e: KeyboardEvent) => {
       if (e.key === "Escape" && showCompare) setShowCompare(false);
+      if (mode !== "voice") return; // Space-to-talk is voice mode only
       if (e.code !== "Space" || e.repeat || isTyping(e.target)) return;
       if (showCompare || showSummary || call.status !== "ready" || call.reconnecting) return;
       e.preventDefault();
@@ -106,7 +115,7 @@ function CallView({ call, src, dst, region, sample }: { call: CallState } & Tran
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, [call.status, call.reconnecting, call.startTalk, call.stopTalk, showCompare, showSummary]);
+  }, [mode, call.status, call.reconnecting, call.startTalk, call.stopTalk, showCompare, showSummary]);
 
   const regionLabel = call.regionLabel || regionByCode(region).label;
   const lastTurn = call.turns[call.turns.length - 1];
@@ -193,6 +202,51 @@ function CallView({ call, src, dst, region, sample }: { call: CallState } & Tran
             </span>
           )}
         </button>
+        {/* Voice / Text input mode */}
+        <div className="flex gap-1 rounded-xl bg-mt-elevated p-1">
+          {(["voice", "text"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              aria-pressed={mode === m}
+              className={`flex-1 rounded-lg py-2 text-[13px] font-semibold transition-colors ${
+                mode === m ? "bg-mt-surface text-mt-primary" : "text-mt-muted"
+              }`}
+            >
+              {m === "voice" ? "🎙 Voice" : "⌨ Text"}
+            </button>
+          ))}
+        </div>
+
+        {mode === "text" && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitText();
+            }}
+            className="flex items-center gap-2"
+          >
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              disabled={call.status !== "ready"}
+              placeholder="Type something to translate…"
+              aria-label="Text to translate"
+              className="min-w-0 flex-1 rounded-xl border border-mt-subtle bg-mt-input px-3.5 py-3 text-base text-mt-primary outline-none placeholder:text-mt-muted focus:border-mt-green disabled:opacity-40"
+            />
+            <button
+              type="submit"
+              disabled={call.status !== "ready" || !draft.trim()}
+              aria-label="Translate"
+              className={`flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-xl text-mt-base transition-transform active:scale-95 ${
+                call.status === "ready" && draft.trim() ? "bg-mt-green" : "bg-mt-elevated text-mt-muted"
+              }`}
+            >
+              <SendIcon />
+            </button>
+          </form>
+        )}
+
         <div className="flex items-center justify-center gap-7">
           <button
             onClick={goHome}
@@ -201,21 +255,23 @@ function CallView({ call, src, dst, region, sample }: { call: CallState } & Tran
           >
             <BackIcon />
           </button>
-          <button
-            onPointerDown={() => call.startTalk()}
-            onPointerUp={() => call.stopTalk()}
-            onPointerLeave={() => call.stopTalk()}
-            onPointerCancel={() => call.stopTalk()}
-            onContextMenu={(e) => e.preventDefault()}
-            disabled={call.status !== "ready" || call.reconnecting}
-            aria-label="Hold to talk (or hold the Space bar)"
-            aria-pressed={call.speaking}
-            className={`flex h-[74px] w-[74px] touch-none select-none items-center justify-center rounded-full text-mt-base transition-transform active:scale-95 ${
-              call.speaking ? "bg-mt-greenDeep scale-105" : "bg-mt-green"
-            } ${call.status !== "ready" || call.reconnecting ? "opacity-40" : ""}`}
-          >
-            <MicIcon />
-          </button>
+          {mode === "voice" && (
+            <button
+              onPointerDown={() => call.startTalk()}
+              onPointerUp={() => call.stopTalk()}
+              onPointerLeave={() => call.stopTalk()}
+              onPointerCancel={() => call.stopTalk()}
+              onContextMenu={(e) => e.preventDefault()}
+              disabled={call.status !== "ready" || call.reconnecting}
+              aria-label="Hold to talk (or hold the Space bar)"
+              aria-pressed={call.speaking}
+              className={`flex h-[74px] w-[74px] touch-none select-none items-center justify-center rounded-full text-mt-base transition-transform active:scale-95 ${
+                call.speaking ? "bg-mt-greenDeep scale-105" : "bg-mt-green"
+              } ${call.status !== "ready" || call.reconnecting ? "opacity-40" : ""}`}
+            >
+              <MicIcon />
+            </button>
+          )}
           <button
             onClick={endCall}
             aria-label="End call"
@@ -325,6 +381,13 @@ function BoltIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
       <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" />
+    </svg>
+  );
+}
+function SendIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M3.4 20.4 21 12 3.4 3.6 3 10l12 2-12 2 .4 6.4Z" />
     </svg>
   );
 }

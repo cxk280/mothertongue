@@ -41,6 +41,7 @@ export interface CallState {
   connect: () => void;
   startTalk: () => Promise<void>;
   stopTalk: () => void;
+  translateText: (text: string) => void;
   sampleUtterance: () => void;
   hangup: () => void;
   restart: () => void;
@@ -252,6 +253,15 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
     ws.send(JSON.stringify({ type: "end_utterance" }));
   }, []);
 
+  // Translate typed text instead of speech — the server skips STT and returns a normal
+  // turn, so the transcript, HUD, and Compare all light up exactly as with voice.
+  const translateText = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    talkEndRef.current = performance.now();
+    send({ type: "translate_text", text: trimmed });
+  }, []);
+
   const hangup = useCallback(() => {
     send({ type: "stop" });
     teardown();
@@ -303,6 +313,7 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
     connect,
     startTalk,
     stopTalk,
+    translateText,
     sampleUtterance,
     hangup,
     restart,
