@@ -54,6 +54,21 @@ translated). Both reconnect with backoff on a dropped socket.
 - **The GPU is cattle.** It is provisioned on demand and torn down when idle (hourly billing);
   no state lives on it.
 
+## Going live (real models on the GPU)
+
+Switching from the CPU fallback to the real in-region models is a config flip — no code
+change. Point the two processes at the running GPU:
+
+- **Server** (on the GPU box): `MT_MODE=real MT_DEVICE=cuda` — forces the real
+  MMS/NLLB/MMS-TTS stages (errors loudly if their deps are missing, rather than silently
+  falling back).
+- **Web**: `NEXT_PUBLIC_WS_URL=wss://<gpu-host>/ws` — the browser talks to the in-region
+  server; `healthUrl()`/`roomUrl()`/`offerUrl()` are all derived from it.
+
+`GET /healthz` reports `mode` + `device`, and every `ready`/`joined` frame carries
+`engine: "real" | "fallback"` — the LatencyHud renders it, so a demo is always honest about
+which path is live. Nothing else changes: the same wire contract and UI drive real numbers.
+
 ## Not yet verified
 
 The **real models have only run on the CPU fallback.** The `Real{STT,MT,TTS}` paths are

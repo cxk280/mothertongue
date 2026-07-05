@@ -11,7 +11,7 @@ import { WeakNetworkOverlay } from "@/components/WeakNetworkOverlay";
 import { LANGUAGES, REGIONS, networkProfile } from "@/lib/data";
 import { healthUrl } from "@/lib/env";
 import { latencyTier, tierClasses } from "@/lib/format";
-import { formatNetworkChip } from "@/lib/network";
+import { type LiveNetwork, formatLiveNetwork, formatNetworkChip, onConnectionChange, readConnection } from "@/lib/network";
 import { newRoomCode } from "@/lib/room";
 
 export default function Landing() {
@@ -22,6 +22,7 @@ export default function Landing() {
   const [ping, setPing] = useState<number | null>(null);
   const [netId, setNetId] = useState("off");
   const [showNet, setShowNet] = useState(false);
+  const [live, setLive] = useState<LiveNetwork>({ supported: false });
 
   // Measure the real round-trip to the in-region health endpoint.
   useEffect(() => {
@@ -34,6 +35,14 @@ export default function Landing() {
       alive = false;
     };
   }, []);
+
+  // Read the browser's real connection for the network chip, and track live changes.
+  useEffect(() => {
+    setLive(readConnection());
+    return onConnectionChange(() => setLive(readConnection()));
+  }, []);
+
+  const netChip = netId === "off" ? formatLiveNetwork(live) : formatNetworkChip(networkProfile(netId));
 
   const swap = () => {
     setSrc(dst);
@@ -122,7 +131,7 @@ export default function Landing() {
         }`}
       >
         <span className={`text-[13px] font-medium ${netId === "off" ? "text-mt-secondary" : "text-mt-amber"}`}>
-          {formatNetworkChip(networkProfile(netId))}
+          {netChip}
         </span>
         <span className="text-[11px] font-semibold text-mt-muted">{netId === "off" ? "Simulate" : "Change"}</span>
       </button>
