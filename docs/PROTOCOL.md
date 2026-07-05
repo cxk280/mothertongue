@@ -46,3 +46,31 @@ in-region network hop — which is the whole point.
   the real models or the CPU fallback.
 - One utterance = one `turn`. This first version is single-speaker push-to-talk;
   two-way peer calling is a later increment.
+
+## WebRTC transport (opt-in)
+
+An alternative uplink for the single-speaker call, enabled with `MT_WEBRTC=1`
+(server) and `NEXT_PUBLIC_WEBRTC=1` (web). The WebSocket transport above is always
+available and remains the default.
+
+The browser opens an `RTCPeerConnection` to the server (client↔server, **not** P2P —
+the in-region GPU must terminate the media) and signals via a single HTTP call:
+
+- `POST /webrtc/offer` with `{ sdp, type }` → responds `{ sdp, type }` (the server's
+  answer; ICE is non-trickle, so the answer already carries candidates).
+
+Audio travels as an **Opus track** (~24 kbps vs ~256 kbps for raw PCM16 — the
+weak-network win); the server decodes it to PCM16 and feeds the *same* pipeline. All
+control frames and every `ready`/`turn`/`error` above travel over an
+`RTCDataChannel` labelled `control`, so the wire contract is otherwise identical and
+the browser renders turns exactly as over WebSocket.
+
+Because the browser streams audio continuously (rather than only while the mic is
+held), the utterance is delimited explicitly with one extra client frame:
+
+| Message | Fields | When |
+|---|---|---|
+| `start_utterance` | — | Push-to-talk pressed. Server arms capture (clears its buffer). |
+| `end_utterance` | — | Push-to-talk released. Server runs the pipeline on what it captured. |
+
+`start`, `stop`, and the server→client messages are unchanged.

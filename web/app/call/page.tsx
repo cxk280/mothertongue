@@ -12,8 +12,9 @@ import { SessionSummary } from "@/components/SessionSummary";
 import { Transcript } from "@/components/Transcript";
 import { Waveform } from "@/components/Waveform";
 import { regionByCode } from "@/lib/data";
-import { WS_URL } from "@/lib/env";
-import { useCall } from "@/lib/useCall";
+import { WEBRTC_ENABLED, WS_URL, offerUrl } from "@/lib/env";
+import { type CallState, useCall } from "@/lib/useCall";
+import { useWebrtcCall } from "@/lib/useWebrtcCall";
 
 export default function CallPage() {
   return (
@@ -23,15 +24,36 @@ export default function CallPage() {
   );
 }
 
+// Pick the transport once from the build-time flag, then hand a uniform CallState to the
+// same view. Two containers (not a conditional hook) keep React's rules-of-hooks happy;
+// the WebSocket path is the default and untouched.
 function CallInner() {
-  const router = useRouter();
   const params = useSearchParams();
   const src = params.get("src") ?? "zul";
   const dst = params.get("dst") ?? "eng";
   const region = params.get("region") ?? "sao";
   const sample = params.get("sample") === "1";
+  return WEBRTC_ENABLED ? (
+    <WebrtcCall src={src} dst={dst} region={region} sample={sample} />
+  ) : (
+    <WsCall src={src} dst={dst} region={region} sample={sample} />
+  );
+}
 
+type TransportProps = { src: string; dst: string; region: string; sample: boolean };
+
+function WsCall({ src, dst, region, sample }: TransportProps) {
   const call = useCall(WS_URL, src, dst);
+  return <CallView call={call} src={src} dst={dst} region={region} sample={sample} />;
+}
+
+function WebrtcCall({ src, dst, region, sample }: TransportProps) {
+  const call = useWebrtcCall(offerUrl(), src, dst);
+  return <CallView call={call} src={src} dst={dst} region={region} sample={sample} />;
+}
+
+function CallView({ call, src, dst, region, sample }: { call: CallState } & TransportProps) {
+  const router = useRouter();
   const [showCompare, setShowCompare] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [summaryDurationMs, setSummaryDurationMs] = useState(0);
