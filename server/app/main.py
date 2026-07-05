@@ -150,8 +150,16 @@ async def ws_endpoint(ws: WebSocket) -> None:
                 if pipeline is None:
                     await _send(ws, ServerError(code="not_started", message="Send start first"))
                     continue
-                typed = (msg.get("text") or "").strip()
+                raw = msg.get("text")
+                # Ignore a non-string `text` (type confusion) rather than crashing on .strip().
+                typed = raw.strip() if isinstance(raw, str) else ""
                 if not typed:
+                    continue
+                # Cap it so a client can't push an unbounded string into MT/TTS.
+                if len(typed) > settings.max_text_chars:
+                    await _send(ws, ServerError(
+                        code="too_long", message="Text is too long — please shorten it"
+                    ))
                     continue
                 turn = await run_in_threadpool(pipeline.run_text, typed, src, dst)
                 await ws.send_text(turn.model_dump_json())

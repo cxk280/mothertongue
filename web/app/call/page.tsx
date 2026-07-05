@@ -67,6 +67,13 @@ function CallView({ call, src, dst, region, sample }: { call: CallState } & Tran
     setDraft("");
   };
 
+  // Switching to text while holding the mic would unmount the mic button before its
+  // pointerup fires, leaving the mic capturing — so release it on the way out.
+  const switchMode = (m: "voice" | "text") => {
+    if (m === "text" && call.speaking) call.stopTalk();
+    setMode(m);
+  };
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => call.connect(), []);
 
@@ -207,7 +214,7 @@ function CallView({ call, src, dst, region, sample }: { call: CallState } & Tran
           {(["voice", "text"] as const).map((m) => (
             <button
               key={m}
-              onClick={() => setMode(m)}
+              onClick={() => switchMode(m)}
               aria-pressed={mode === m}
               className={`flex-1 rounded-lg py-2 text-[13px] font-semibold transition-colors ${
                 mode === m ? "bg-mt-surface text-mt-primary" : "text-mt-muted"

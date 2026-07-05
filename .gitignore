@@ -27,3 +27,4 @@ out/
 
 # Infra runtime state
 infra/.instance-id
+docs/EDGE_CASES.md

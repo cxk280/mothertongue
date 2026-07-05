@@ -201,6 +201,10 @@ export function useWebrtcCall(signalUrl: string, src: string, dst: string): Call
   // this satisfies the CallState contract as an explicit no-op.
   const sampleUtterance = useCallback(() => {}, []);
 
+  // Typed-text translation is a /ws-transport feature (the WebRTC data channel doesn't
+  // carry translate_text yet); explicit no-op so the CallState contract is satisfied.
+  const translateText = useCallback((_text: string) => {}, []);
+
   const restart = useCallback(() => {
     teardown();
     setTurns([]);
@@ -232,6 +236,7 @@ export function useWebrtcCall(signalUrl: string, src: string, dst: string): Call
     connect: () => void connect(),
     startTalk,
     stopTalk,
+    translateText,
     sampleUtterance,
     hangup,
     restart,
