@@ -54,7 +54,7 @@ export function SessionSummary({
   };
 
   return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-mt-base">
+    <div role="dialog" aria-modal="true" aria-label="Session summary" className="absolute inset-0 z-20 overflow-y-auto bg-mt-base">
       <div className="mx-auto flex min-h-full w-full max-w-[420px] flex-col gap-[18px] px-5 pb-8 pt-12">
         <header className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-full border border-mt-greenBrd bg-mt-greenDim">

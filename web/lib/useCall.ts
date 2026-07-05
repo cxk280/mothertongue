@@ -1,11 +1,13 @@
 "use client";
 
 // The call state machine: owns the WebSocket, the mic, per-turn round-trip timing,
-// and playback. Components read the returned state; the Call screen drives it.
+// and playback. Reconnects with exponential backoff if the socket drops mid-call
+// (unless the user hung up). Components read the returned state; the Call screen drives it.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MicCapture, playWavBase64 } from "./audio";
+import { MAX_RECONNECT_ATTEMPTS, backoffMs } from "./backoff";
 import type { ServerMessage, Timings } from "./types";
 
 const SAMPLE_RATE = 16000;
@@ -33,6 +35,7 @@ export interface CallState {
   micLevel: number;
   speaking: boolean;
   error: string | null;
+  reconnecting: boolean;
   startedAt: number | null;
   connect: () => void;
   startTalk: () => Promise<void>;
@@ -51,35 +54,56 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
   const [micLevel, setMicLevel] = useState(0);
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reconnecting, setReconnecting] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const micRef = useRef<MicCapture | null>(null);
   const talkEndRef = useRef<number>(0);
+  const intentionalRef = useRef(false); // true = user closed; suppress reconnect
+  const attemptRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const openSocketRef = useRef<() => void>(() => {});
 
   const send = (obj: unknown) => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
   };
 
-  const connect = useCallback(() => {
+  const clearReconnectTimer = () => {
+    if (reconnectTimerRef.current != null) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  };
+
+  const openSocket = useCallback(() => {
     if (wsRef.current) return;
     setStatus("connecting");
-    setError(null);
-    setStartedAt(Date.now());
     const ws = new WebSocket(wsUrl);
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 
     ws.onopen = () => ws.send(JSON.stringify({ type: "start", src, dst }));
-    ws.onerror = () => {
-      setStatus("error");
-      setError("Couldn’t reach the in-region endpoint.");
-    };
+
     ws.onclose = () => {
-      if (status !== "idle") setStatus((s) => (s === "error" ? s : "idle"));
+      if (wsRef.current !== ws) return; // superseded by a newer socket; ignore
+      wsRef.current = null;
+      if (intentionalRef.current) return;
+      if (attemptRef.current < MAX_RECONNECT_ATTEMPTS) {
+        setReconnecting(true);
+        const delay = backoffMs(attemptRef.current);
+        attemptRef.current += 1;
+        reconnectTimerRef.current = window.setTimeout(() => openSocketRef.current(), delay);
+      } else {
+        setReconnecting(false);
+        setStatus("error");
+        setError("Connection lost. Check your network and retry.");
+      }
     };
+
     ws.onmessage = (ev) => {
+      if (wsRef.current !== ws) return;
       let msg: ServerMessage;
       try {
         msg = JSON.parse(ev.data as string) as ServerMessage;
@@ -90,6 +114,8 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
         setEngine(msg.engine);
         setRegionLabel(msg.region_label);
         setStatus("ready");
+        attemptRef.current = 0;
+        setReconnecting(false);
       } else if (msg.type === "turn") {
         const rtt = talkEndRef.current ? performance.now() - talkEndRef.current : msg.timings.total_ms;
         setLastRtt(rtt);
@@ -109,11 +135,31 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
           setTurns((prev) => prev.map((t) => (t.id === turn.id ? { ...t, playing: false } : t)));
         });
       } else if (msg.type === "error") {
-        setError(msg.message);
-        setStatus("error");
+        // "too_long" is a soft notice (the mic was released for you), not fatal.
+        if (msg.code === "too_long") {
+          setError(msg.message);
+        } else {
+          setError(msg.message);
+          setStatus("error");
+        }
       }
     };
-  }, [wsUrl, src, dst, status]);
+  }, [wsUrl, src, dst]);
+
+  useEffect(() => {
+    openSocketRef.current = openSocket;
+  }, [openSocket]);
+
+  const connect = useCallback(() => {
+    if (wsRef.current) return;
+    intentionalRef.current = false;
+    attemptRef.current = 0;
+    clearReconnectTimer();
+    setError(null);
+    setReconnecting(false);
+    setStartedAt(Date.now());
+    openSocket();
+  }, [openSocket]);
 
   const startTalk = useCallback(async () => {
     if (status !== "ready") return;
@@ -130,7 +176,7 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
       micRef.current = mic;
       setSpeaking(true);
     } catch {
-      setError("Microphone access is blocked.");
+      setError("Microphone access is blocked. Enable it in your browser settings.");
     }
   }, [status]);
 
@@ -143,22 +189,26 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
     send({ type: "end_utterance" });
   }, []);
 
-  const hangup = useCallback(() => {
+  const teardown = () => {
+    intentionalRef.current = true;
+    clearReconnectTimer();
     micRef.current?.stop();
     micRef.current = null;
-    send({ type: "stop" });
     wsRef.current?.close();
     wsRef.current = null;
+  };
+
+  const hangup = useCallback(() => {
+    send({ type: "stop" });
+    teardown();
     setStatus("idle");
     setSpeaking(false);
+    setReconnecting(false);
   }, []);
 
   // Tear down the current session and reconnect fresh — for "Start another call".
   const restart = useCallback(() => {
-    micRef.current?.stop();
-    micRef.current = null;
-    wsRef.current?.close();
-    wsRef.current = null;
+    teardown();
     setTurns([]);
     setLastRtt(null);
     setLastTimings(null);
@@ -172,6 +222,8 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
   // Clean up the socket + mic if the component unmounts mid-call.
   useEffect(() => {
     return () => {
+      intentionalRef.current = true;
+      clearReconnectTimer();
       micRef.current?.stop();
       wsRef.current?.close();
     };
@@ -187,6 +239,7 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
     micLevel,
     speaking,
     error,
+    reconnecting,
     startedAt,
     connect,
     startTalk,

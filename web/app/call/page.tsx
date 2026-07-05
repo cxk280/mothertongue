@@ -38,6 +38,34 @@ function CallInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => call.connect(), []);
 
+  // Keyboard: hold Space to talk (accessibility alternative to the mic button);
+  // Escape closes the Compare overlay.
+  useEffect(() => {
+    const isTyping = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null;
+      return !!el && ["INPUT", "SELECT", "TEXTAREA"].includes(el.tagName);
+    };
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && showCompare) setShowCompare(false);
+      if (e.code !== "Space" || e.repeat || isTyping(e.target)) return;
+      if (showCompare || showSummary || call.status !== "ready") return;
+      e.preventDefault();
+      void call.startTalk();
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code === "Space" && call.speaking) {
+        e.preventDefault();
+        call.stopTalk();
+      }
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, [call.status, call.speaking, call.startTalk, call.stopTalk, showCompare, showSummary]);
+
   const regionLabel = call.regionLabel || regionByCode(region).label;
   const lastTurn = call.turns[call.turns.length - 1];
   const canCompare = lastTurn != null && call.lastRtt != null && call.lastTimings != null;
@@ -68,6 +96,16 @@ function CallInner() {
         rttMs={call.lastRtt}
         timings={call.lastTimings}
       />
+
+      {call.reconnecting && (
+        <div
+          role="status"
+          className="flex items-center justify-center gap-2 bg-mt-amber/15 py-2 text-[13px] font-medium text-mt-amber"
+        >
+          <span className="h-3 w-3 animate-spin rounded-full border-2 border-mt-amber/40 border-t-mt-amber" />
+          Reconnecting to {regionLabel}…
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         <Transcript turns={call.turns} />
@@ -113,7 +151,8 @@ function CallInner() {
             onPointerCancel={() => call.speaking && call.stopTalk()}
             onContextMenu={(e) => e.preventDefault()}
             disabled={call.status !== "ready"}
-            aria-label="Hold to talk"
+            aria-label="Hold to talk (or hold the Space bar)"
+            aria-pressed={call.speaking}
             className={`flex h-[74px] w-[74px] touch-none select-none items-center justify-center rounded-full text-mt-base transition-transform active:scale-95 ${
               call.speaking ? "bg-mt-greenDeep scale-105" : "bg-mt-green"
             } ${call.status !== "ready" ? "opacity-40" : ""}`}
@@ -193,7 +232,11 @@ function CallInner() {
 
 function Overlay({ children }: { children: React.ReactNode }) {
   return (
-    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-mt-base/95 px-6">
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-mt-base/95 px-6"
+    >
       {children}
     </div>
   );

@@ -36,6 +36,10 @@ class Settings:
     # When true, the fallback sleeps a little so live demos feel real. Tests set 0.
     fallback_sleep: bool = _env("MT_FALLBACK_SLEEP", "1") not in ("0", "false", "")
 
+    # Cap a single buffered utterance so a client that never releases the mic can't
+    # grow the buffer without bound. Default ~90s of PCM16 @ 16kHz mono.
+    max_utterance_bytes: int = int(_env("MT_MAX_UTTERANCE_BYTES", str(16000 * 2 * 90)))
+
     @property
     def force_fallback(self) -> bool:
         return self.mode == "fallback"
