@@ -54,6 +54,30 @@ def test_ws_translate_text_before_start_errors():
         assert msg["type"] == "error" and msg["code"] == "not_started"
 
 
+def test_ws_translate_text_over_cap_is_rejected():
+    # Unbounded typed text must not reach MT/TTS (conftest sets MT_MAX_TEXT_CHARS small).
+    client = TestClient(app)
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text(json.dumps({"type": "start", "src": "zul", "dst": "eng"}))
+        assert ws.receive_json()["type"] == "ready"
+        ws.send_text(json.dumps({"type": "translate_text", "text": "x" * 5000}))
+        msg = ws.receive_json()
+        assert msg["type"] == "error" and msg["code"] == "too_long"
+
+
+def test_ws_translate_text_non_string_is_ignored_not_crash():
+    # A non-string `text` (type confusion) must be ignored, not crash the connection.
+    client = TestClient(app)
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text(json.dumps({"type": "start", "src": "zul", "dst": "eng"}))
+        assert ws.receive_json()["type"] == "ready"
+        ws.send_text(json.dumps({"type": "translate_text", "text": 123}))  # int, not str
+        # Connection stays alive: a valid follow-up still round-trips.
+        ws.send_text(json.dumps({"type": "translate_text", "text": "Sawubona"}))
+        turn = ws.receive_json()
+        assert turn["type"] == "turn" and turn["src_text"] == "Sawubona"
+
+
 def test_ws_end_before_start_errors():
     client = TestClient(app)
     with client.websocket_connect("/ws") as ws:

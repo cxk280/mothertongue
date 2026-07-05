@@ -40,6 +40,10 @@ class Settings:
     # grow the buffer without bound. Default ~90s of PCM16 @ 16kHz mono.
     max_utterance_bytes: int = int(_env("MT_MAX_UTTERANCE_BYTES", str(16000 * 2 * 90)))
 
+    # Cap typed text (translate_text) so an unauthenticated client can't push an
+    # unbounded string into MT/TTS. A generous paragraph; far more than any utterance.
+    max_text_chars: int = int(_env("MT_MAX_TEXT_CHARS", "2000"))
+
     # Opt-in WebRTC transport (Opus uplink over an aiortc peer connection). Off by
     # default so the base server needs nothing beyond the wheel-only deps; when on,
     # aiortc must be installed. The WebSocket transport is always available.
