@@ -67,15 +67,16 @@ function CallInner() {
     const down = (e: KeyboardEvent) => {
       if (e.key === "Escape" && showCompare) setShowCompare(false);
       if (e.code !== "Space" || e.repeat || isTyping(e.target)) return;
-      if (showCompare || showSummary || call.status !== "ready") return;
+      if (showCompare || showSummary || call.status !== "ready" || call.reconnecting) return;
       e.preventDefault();
       void call.startTalk();
     };
     const up = (e: KeyboardEvent) => {
-      if (e.code === "Space" && call.speaking) {
-        e.preventDefault();
-        call.stopTalk();
-      }
+      // Always release on Space up — stopTalk is idempotent and also clears a press that
+      // was still starting the mic (so a quick tap can't leave it capturing).
+      if (e.code !== "Space" || isTyping(e.target)) return;
+      e.preventDefault();
+      call.stopTalk();
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
@@ -83,7 +84,7 @@ function CallInner() {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, [call.status, call.speaking, call.startTalk, call.stopTalk, showCompare, showSummary]);
+  }, [call.status, call.reconnecting, call.startTalk, call.stopTalk, showCompare, showSummary]);
 
   const regionLabel = call.regionLabel || regionByCode(region).label;
   const lastTurn = call.turns[call.turns.length - 1];
@@ -135,6 +136,12 @@ function CallInner() {
         </div>
       )}
 
+      {call.notice && (
+        <div role="status" className="bg-mt-surface py-2 text-center text-[13px] font-medium text-mt-amber">
+          {call.notice}
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto">
         <Transcript turns={call.turns} />
       </div>
@@ -174,16 +181,16 @@ function CallInner() {
           </button>
           <button
             onPointerDown={() => call.startTalk()}
-            onPointerUp={() => call.speaking && call.stopTalk()}
-            onPointerLeave={() => call.speaking && call.stopTalk()}
-            onPointerCancel={() => call.speaking && call.stopTalk()}
+            onPointerUp={() => call.stopTalk()}
+            onPointerLeave={() => call.stopTalk()}
+            onPointerCancel={() => call.stopTalk()}
             onContextMenu={(e) => e.preventDefault()}
-            disabled={call.status !== "ready"}
+            disabled={call.status !== "ready" || call.reconnecting}
             aria-label="Hold to talk (or hold the Space bar)"
             aria-pressed={call.speaking}
             className={`flex h-[74px] w-[74px] touch-none select-none items-center justify-center rounded-full text-mt-base transition-transform active:scale-95 ${
               call.speaking ? "bg-mt-greenDeep scale-105" : "bg-mt-green"
-            } ${call.status !== "ready" ? "opacity-40" : ""}`}
+            } ${call.status !== "ready" || call.reconnecting ? "opacity-40" : ""}`}
           >
             <MicIcon />
           </button>
