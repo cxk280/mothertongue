@@ -11,7 +11,7 @@ import { LatencyHud } from "@/components/LatencyHud";
 import { Waveform } from "@/components/Waveform";
 import { LANGUAGES, languageLabel, regionByCode } from "@/lib/data";
 import { roomUrl } from "@/lib/env";
-import { normalizeRoomCode } from "@/lib/room";
+import { isValidRoomCode, normalizeRoomCode } from "@/lib/room";
 import { useRoom } from "@/lib/useRoom";
 
 export default function RoomPage() {
@@ -28,7 +28,7 @@ function RoomInner() {
   const code = normalizeRoomCode(String(params.code ?? ""));
   const [lang, setLang] = useState<string | null>(search.get("lang"));
 
-  if (!code) return <Centered>Invalid room code.</Centered>;
+  if (!isValidRoomCode(code)) return <Centered>Invalid room code.</Centered>;
   if (!lang) return <JoinGate code={code} onJoin={setLang} />;
   return <RoomCall code={code} lang={lang} />;
 }
@@ -146,15 +146,16 @@ function RoomCall({ code, lang }: { code: string; lang: string }) {
       <div className="flex items-center justify-center gap-7 border-t border-mt-subtle bg-mt-surface px-5 pb-8 pt-4">
         <button
           onPointerDown={() => room.startTalk()}
-          onPointerUp={() => room.speaking && room.stopTalk()}
-          onPointerLeave={() => room.speaking && room.stopTalk()}
-          onPointerCancel={() => room.speaking && room.stopTalk()}
+          onPointerUp={() => room.stopTalk()}
+          onPointerLeave={() => room.stopTalk()}
+          onPointerCancel={() => room.stopTalk()}
           onContextMenu={(e) => e.preventDefault()}
-          disabled={room.status !== "active"}
+          disabled={room.status !== "active" || room.reconnecting}
           aria-label="Hold to talk"
+          aria-pressed={room.speaking}
           className={`flex h-[74px] w-[74px] touch-none select-none items-center justify-center rounded-full text-mt-base transition-transform active:scale-95 ${
             room.speaking ? "scale-105 bg-mt-greenDeep" : "bg-mt-green"
-          } ${room.status !== "active" ? "opacity-40" : ""}`}
+          } ${room.status !== "active" || room.reconnecting ? "opacity-40" : ""}`}
         >
           <MicIcon />
         </button>

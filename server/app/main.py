@@ -85,7 +85,8 @@ async def ws_endpoint(ws: WebSocket) -> None:
             kind = msg.get("type")
 
             if kind == "start":
-                src, dst = msg.get("src", "zul"), msg.get("dst", "eng")
+                # `or` (not `.get` defaults) so an explicit JSON null still falls back.
+                src, dst = msg.get("src") or "zul", msg.get("dst") or "eng"
                 buffer.clear()
                 # First build may download/load models — keep the loop responsive.
                 pipeline = await run_in_threadpool(build_pipeline, settings)
@@ -163,14 +164,25 @@ async def room_endpoint(ws: WebSocket) -> None:
             kind = msg.get("type")
 
             if kind == "join":
+                if peer_id is not None:
+                    # One socket = one participant; a second join would orphan the first.
+                    await _send(ws, ServerError(
+                        code="already_joined", message="This connection already joined a room"
+                    ))
+                    continue
                 room_id = str(msg.get("room", "")).strip()
-                lang = msg.get("lang", "eng")
+                lang = msg.get("lang") or "eng"
                 if not room_id:
                     await _send(ws, ServerError(code="no_room", message="A room code is required"))
                     continue
-                peer_id = uuid.uuid4().hex
+                new_id = uuid.uuid4().hex
                 buffer.clear()
-                room = registry.join(room_id, Peer(id=peer_id, lang=lang, ws=ws))
+                room = registry.join(room_id, Peer(id=new_id, lang=lang, ws=ws))
+                if room is None:  # room already has two people
+                    room_id = None
+                    await _send(ws, ServerError(code="room_full", message="This room is full"))
+                    continue
+                peer_id = new_id
                 await _send(ws, ServerJoined(
                     room=room_id, self_lang=lang,
                     region_label=settings.region_label, region_code=settings.region_code,
@@ -180,6 +192,10 @@ async def room_endpoint(ws: WebSocket) -> None:
                 if other is not None:
                     await notify_presence(room, True, other.lang, room.peers[peer_id])
                     await notify_presence(room, True, lang, other)
+                else:
+                    # Tell this peer they're alone — corrects a reconnecting client whose
+                    # partner left during the outage (otherwise it keeps a ghost peer).
+                    await notify_presence(room, False, None, room.peers[peer_id])
 
             elif kind == "end_utterance":
                 room = registry.get(room_id) if room_id else None
@@ -194,7 +210,12 @@ async def room_endpoint(ws: WebSocket) -> None:
                 if listener is None:  # peer left mid-utterance
                     continue
                 # Listener hears the translated audio; speaker gets a text-only echo.
-                await listener.ws.send_text(turn.model_dump_json())
+                # A listener that vanished in the relay window must not take the speaker
+                # down with it — presence will report the departure separately.
+                try:
+                    await listener.ws.send_text(turn.model_dump_json())
+                except Exception:
+                    pass
                 await _send(ws, sent)
 
             elif kind == "leave":

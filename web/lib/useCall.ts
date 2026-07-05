@@ -35,6 +35,7 @@ export interface CallState {
   micLevel: number;
   speaking: boolean;
   error: string | null;
+  notice: string | null;
   reconnecting: boolean;
   startedAt: number | null;
   connect: () => void;
@@ -55,11 +56,14 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
   const [micLevel, setMicLevel] = useState(0);
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [reconnecting, setReconnecting] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const micRef = useRef<MicCapture | null>(null);
+  const talkIntentRef = useRef(false); // true between press and release; guards the async mic start
+  const noticeTimerRef = useRef<number | null>(null);
   const talkEndRef = useRef<number>(0);
   const intentionalRef = useRef(false); // true = user closed; suppress reconnect
   const attemptRef = useRef(0);
@@ -78,6 +82,22 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
     }
   };
 
+  // Stop capturing and forget any in-progress press. Used when the socket drops or the
+  // server force-ends an utterance, so the mic never keeps streaming into a dead session.
+  const releaseMic = () => {
+    talkIntentRef.current = false;
+    micRef.current?.stop();
+    micRef.current = null;
+    setSpeaking(false);
+    setMicLevel(0);
+  };
+
+  const flashNotice = (message: string) => {
+    setNotice(message);
+    if (noticeTimerRef.current != null) clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setNotice(null), 2500);
+  };
+
   const openSocket = useCallback(() => {
     if (wsRef.current) return;
     setStatus("connecting");
@@ -91,6 +111,9 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
       if (wsRef.current !== ws) return; // superseded by a newer socket; ignore
       wsRef.current = null;
       if (intentionalRef.current) return;
+      // Dropped mid-call: stop the mic so it can't stream into the reconnected socket
+      // with no matching start. The `reconnecting` flag disables push-to-talk meanwhile.
+      releaseMic();
       if (attemptRef.current < MAX_RECONNECT_ATTEMPTS) {
         setReconnecting(true);
         const delay = backoffMs(attemptRef.current);
@@ -136,9 +159,11 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
           setTurns((prev) => prev.map((t) => (t.id === turn.id ? { ...t, playing: false } : t)));
         });
       } else if (msg.type === "error") {
-        // "too_long" is a soft notice (the mic was released for you), not fatal.
+        // "too_long" is a soft notice, not fatal: actually release the mic (the server
+        // dropped the buffer) and surface it as a transient banner, not the error overlay.
         if (msg.code === "too_long") {
-          setError(msg.message);
+          releaseMic();
+          flashNotice(msg.message);
         } else {
           setError(msg.message);
           setStatus("error");
@@ -163,7 +188,11 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
   }, [openSocket]);
 
   const startTalk = useCallback(async () => {
-    if (status !== "ready") return;
+    if (status !== "ready" || reconnecting) return;
+    // Guard re-entrancy: a mic start already in flight (intent set) or a live capture
+    // must not spawn a second MicCapture that would leak the first.
+    if (micRef.current || talkIntentRef.current) return;
+    talkIntentRef.current = true;
     try {
       const mic = new MicCapture(
         SAMPLE_RATE,
@@ -174,24 +203,37 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
         (level) => setMicLevel(level),
       );
       await mic.start();
+      // The user may have released (quick tap, or during the permission prompt) while
+      // getUserMedia was still resolving — if so, don't leave the mic capturing.
+      if (!talkIntentRef.current) {
+        mic.stop();
+        return;
+      }
       micRef.current = mic;
       setSpeaking(true);
     } catch {
+      talkIntentRef.current = false;
       setError("Microphone access is blocked. Enable it in your browser settings.");
     }
-  }, [status]);
+  }, [status, reconnecting]);
 
   const stopTalk = useCallback(() => {
+    // Idempotent: safe to call even if the press never became a live mic (see startTalk).
+    const wasCapturing = micRef.current != null;
+    talkIntentRef.current = false;
     micRef.current?.stop();
     micRef.current = null;
     setSpeaking(false);
     setMicLevel(0);
-    talkEndRef.current = performance.now();
-    send({ type: "end_utterance" });
+    if (wasCapturing) {
+      talkEndRef.current = performance.now();
+      send({ type: "end_utterance" });
+    }
   }, []);
 
   const teardown = () => {
     intentionalRef.current = true;
+    talkIntentRef.current = false;
     clearReconnectTimer();
     micRef.current?.stop();
     micRef.current = null;
@@ -231,13 +273,17 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
     connect();
   }, [connect]);
 
-  // Clean up the socket + mic if the component unmounts mid-call.
+  // Clean up the socket + mic if the component unmounts mid-call. Null the refs too, so
+  // a StrictMode mount→unmount→remount can open a fresh socket instead of short-circuiting.
   useEffect(() => {
     return () => {
       intentionalRef.current = true;
       clearReconnectTimer();
+      if (noticeTimerRef.current != null) clearTimeout(noticeTimerRef.current);
       micRef.current?.stop();
+      micRef.current = null;
       wsRef.current?.close();
+      wsRef.current = null;
     };
   }, []);
 
@@ -251,6 +297,7 @@ export function useCall(wsUrl: string, src: string, dst: string): CallState {
     micLevel,
     speaking,
     error,
+    notice,
     reconnecting,
     startedAt,
     connect,

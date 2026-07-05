@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { codeFromValues, newRoomCode, normalizeRoomCode } from "./room";
+import { ROOM_CODE_LEN, codeFromValues, isValidRoomCode, newRoomCode, normalizeRoomCode } from "./room";
 
 describe("codeFromValues", () => {
   it("maps into the safe alphabet and wraps modulo", () => {
@@ -25,5 +25,20 @@ describe("newRoomCode", () => {
     const code = newRoomCode(5);
     expect(code).toHaveLength(5);
     expect(normalizeRoomCode(code)).toBe(code);
+  });
+  it("defaults to the canonical length", () => {
+    expect(newRoomCode()).toHaveLength(ROOM_CODE_LEN);
+  });
+});
+
+describe("isValidRoomCode", () => {
+  it("accepts a freshly minted code", () => {
+    expect(isValidRoomCode(newRoomCode())).toBe(true);
+  });
+  it("rejects codes that are too short or too long", () => {
+    expect(isValidRoomCode("")).toBe(false);
+    expect(isValidRoomCode("AB")).toBe(false);
+    expect(isValidRoomCode("ABCDEFGHIJ")).toBe(false);
+    expect(isValidRoomCode(normalizeRoomCode("ab-cd2"))).toBe(true); // 5 valid chars
   });
 });

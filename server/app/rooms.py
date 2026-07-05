@@ -13,6 +13,10 @@ from .config import Settings
 from .messages import ServerSent, ServerTurn
 from .pipeline import Pipeline, build_pipeline
 
+# A room is a 1:1 call — exactly two peers. Anyone else is turned away so presence
+# and relay routing stay unambiguous.
+MAX_PEERS = 2
+
 
 @dataclass
 class Peer:
@@ -43,11 +47,15 @@ class RoomRegistry:
     def get(self, room_id: str) -> Room | None:
         return self._rooms.get(room_id)
 
-    def join(self, room_id: str, peer: Peer) -> Room:
+    def join(self, room_id: str, peer: Peer) -> Room | None:
+        """Add a peer to (or create) a room. Returns None if the room is full
+        (already has MAX_PEERS other participants) so the caller can turn them away."""
         room = self._rooms.get(room_id)
         if room is None:
             room = Room(id=room_id, pipeline=build_pipeline(self._settings))
             self._rooms[room_id] = room
+        if peer.id not in room.peers and len(room.peers) >= MAX_PEERS:
+            return None
         room.peers[peer.id] = peer
         return room
 

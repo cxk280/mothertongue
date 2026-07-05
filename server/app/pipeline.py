@@ -9,6 +9,7 @@ are interchangeable.
 from __future__ import annotations
 
 import base64
+import threading
 import time
 
 from .audio_io import pcm16_bytes_to_float32
@@ -33,6 +34,10 @@ class Pipeline:
         self._mt = mt
         self._tts = tts
         self._turn_id = 0
+        # A room's pipeline is shared by both peers and `run` executes on threadpool
+        # workers, so two simultaneous utterances would race the turn counter and call
+        # the (non-reentrant) models concurrently. Serialize a run end-to-end.
+        self._lock = threading.Lock()
         self.engine = (
             "fallback"
             if isinstance(stt, FallbackSTT)
@@ -44,13 +49,17 @@ class Pipeline:
     def run(self, pcm: bytes, src: str, dst: str) -> ServerTurn:
         audio = pcm16_bytes_to_float32(pcm)
 
-        t0 = time.perf_counter()
-        src_text = self._stt.transcribe(audio, src)
-        t1 = time.perf_counter()
-        dst_text = self._mt.translate(src_text, src, dst)
-        t2 = time.perf_counter()
-        wav, _sr = self._tts.synthesize(dst_text, dst)
-        t3 = time.perf_counter()
+        with self._lock:
+            t0 = time.perf_counter()
+            src_text = self._stt.transcribe(audio, src)
+            t1 = time.perf_counter()
+            dst_text = self._mt.translate(src_text, src, dst)
+            t2 = time.perf_counter()
+            wav, _sr = self._tts.synthesize(dst_text, dst)
+            t3 = time.perf_counter()
+
+            self._turn_id += 1
+            turn_id = self._turn_id
 
         ms = lambda a, b: round((b - a) * 1000, 1)  # noqa: E731
         timings = Timings(
@@ -60,9 +69,8 @@ class Pipeline:
             total_ms=ms(t0, t3),
         )
 
-        self._turn_id += 1
         return ServerTurn(
-            id=self._turn_id,
+            id=turn_id,
             src_lang=src,
             dst_lang=dst,
             src_text=src_text,

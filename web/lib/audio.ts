@@ -54,21 +54,29 @@ export class MicCapture {
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
     });
-    this.ctx = new AudioContext({ sampleRate: this.targetRate });
-    this.source = this.ctx.createMediaStreamSource(this.stream);
-    this.node = this.ctx.createScriptProcessor(4096, 1, 1);
-    this.node.onaudioprocess = (e) => {
-      const input = e.inputBuffer.getChannelData(0);
-      const frames = resampleLinear(input, this.ctx!.sampleRate, this.targetRate);
-      this.onLevel?.(rms(frames));
-      this.onFrame(floatToPcm16(frames));
-    };
-    // Route through a muted gain so the graph pulls audio without echoing to speakers.
-    this.sink = this.ctx.createGain();
-    this.sink.gain.value = 0;
-    this.source.connect(this.node);
-    this.node.connect(this.sink);
-    this.sink.connect(this.ctx.destination);
+    try {
+      // Building the audio graph can still throw (e.g. a browser that rejects a forced
+      // 16 kHz AudioContext). If it does, release the mic we just acquired before rethrowing
+      // so the OS mic indicator doesn't stay on.
+      this.ctx = new AudioContext({ sampleRate: this.targetRate });
+      this.source = this.ctx.createMediaStreamSource(this.stream);
+      this.node = this.ctx.createScriptProcessor(4096, 1, 1);
+      this.node.onaudioprocess = (e) => {
+        const input = e.inputBuffer.getChannelData(0);
+        const frames = resampleLinear(input, this.ctx!.sampleRate, this.targetRate);
+        this.onLevel?.(rms(frames));
+        this.onFrame(floatToPcm16(frames));
+      };
+      // Route through a muted gain so the graph pulls audio without echoing to speakers.
+      this.sink = this.ctx.createGain();
+      this.sink.gain.value = 0;
+      this.source.connect(this.node);
+      this.node.connect(this.sink);
+      this.sink.connect(this.ctx.destination);
+    } catch (err) {
+      this.stop();
+      throw err;
+    }
   }
 
   stop(): void {

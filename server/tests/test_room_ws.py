@@ -20,11 +20,23 @@ def test_join_requires_a_room_code():
         assert err["type"] == "error" and err["code"] == "no_room"
 
 
+def test_solo_join_reports_no_peer_present():
+    # A lone joiner is told they're alone (present=false) — this also corrects a
+    # reconnecting client whose partner left during the outage.
+    client = TestClient(app)
+    with client.websocket_connect("/room") as a:
+        a.send_text(json.dumps({"type": "join", "room": "solo1", "lang": "zul"}))
+        assert a.receive_json()["type"] == "joined"
+        peer = a.receive_json()
+        assert peer["type"] == "peer" and peer["present"] is False
+
+
 def test_room_overlong_utterance_is_capped():
     client = TestClient(app)
     with client.websocket_connect("/room") as a:
         a.send_text(json.dumps({"type": "join", "room": "r", "lang": "zul"}))
         assert a.receive_json()["type"] == "joined"
+        assert a.receive_json()["type"] == "peer"  # solo presence notice
         a.send_bytes(bytes(70000))  # exceeds the (test) 64000-byte cap
         msg = a.receive_json()
         assert msg["type"] == "error" and msg["code"] == "too_long"
@@ -35,7 +47,19 @@ def test_speaking_alone_reports_no_peer():
     with client.websocket_connect("/room") as a:
         a.send_text(json.dumps({"type": "join", "room": "solo", "lang": "zul"}))
         assert a.receive_json()["type"] == "joined"
+        assert a.receive_json()["type"] == "peer"  # solo presence notice
         a.send_bytes(SILENCE)
         a.send_text(json.dumps({"type": "end_utterance"}))
         err = a.receive_json()
         assert err["type"] == "error" and err["code"] == "alone"
+
+
+def test_second_join_on_same_connection_is_rejected():
+    client = TestClient(app)
+    with client.websocket_connect("/room") as a:
+        a.send_text(json.dumps({"type": "join", "room": "r1", "lang": "zul"}))
+        assert a.receive_json()["type"] == "joined"
+        assert a.receive_json()["type"] == "peer"
+        a.send_text(json.dumps({"type": "join", "room": "r2", "lang": "eng"}))
+        err = a.receive_json()
+        assert err["type"] == "error" and err["code"] == "already_joined"

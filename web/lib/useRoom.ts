@@ -59,6 +59,8 @@ export function useRoom(roomWsUrl: string, code: string, myLang: string): RoomSt
 
   const wsRef = useRef<WebSocket | null>(null);
   const micRef = useRef<MicCapture | null>(null);
+  const talkIntentRef = useRef(false); // true between press and release; guards the async mic start
+  const noticeTimerRef = useRef<number | null>(null);
   const talkEndRef = useRef<number>(0);
   const peerLangRef = useRef<string | null>(null);
   const intentionalRef = useRef(false);
@@ -78,6 +80,21 @@ export function useRoom(roomWsUrl: string, code: string, myLang: string): RoomSt
     }
   };
 
+  // Stop capturing and forget any in-progress press — used on socket drop / forced end.
+  const releaseMic = () => {
+    talkIntentRef.current = false;
+    micRef.current?.stop();
+    micRef.current = null;
+    setSpeaking(false);
+    setMicLevel(0);
+  };
+
+  const flashNotice = (message: string) => {
+    setNotice(message);
+    if (noticeTimerRef.current != null) clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setNotice(null), 2500);
+  };
+
   const openSocket = useCallback(() => {
     if (wsRef.current) return;
     setStatus((s) => (s === "active" ? s : "connecting"));
@@ -91,6 +108,9 @@ export function useRoom(roomWsUrl: string, code: string, myLang: string): RoomSt
       if (wsRef.current !== ws) return;
       wsRef.current = null;
       if (intentionalRef.current) return;
+      // Dropped mid-call: stop the mic so it can't stream into the reconnected socket.
+      // The `reconnecting` flag disables push-to-talk until we rejoin.
+      releaseMic();
       if (attemptRef.current < MAX_RECONNECT_ATTEMPTS) {
         setReconnecting(true);
         const delay = backoffMs(attemptRef.current);
@@ -154,8 +174,8 @@ export function useRoom(roomWsUrl: string, code: string, myLang: string): RoomSt
         });
       } else if (msg.type === "error") {
         if (msg.code === "alone" || msg.code === "too_long") {
-          setNotice(msg.code === "alone" ? "No one else has joined yet." : "That was too long — mic released.");
-          setTimeout(() => setNotice(null), 2000);
+          if (msg.code === "too_long") releaseMic(); // the server dropped the buffer
+          flashNotice(msg.code === "alone" ? "No one else has joined yet." : "That was too long — mic released.");
         } else {
           setStatus("error");
         }
@@ -177,7 +197,9 @@ export function useRoom(roomWsUrl: string, code: string, myLang: string): RoomSt
   }, [openSocket]);
 
   const startTalk = useCallback(async () => {
-    if (status !== "active") return;
+    if (status !== "active" || reconnecting) return;
+    if (micRef.current || talkIntentRef.current) return; // already talking/starting
+    talkIntentRef.current = true;
     try {
       const mic = new MicCapture(
         SAMPLE_RATE,
@@ -188,24 +210,35 @@ export function useRoom(roomWsUrl: string, code: string, myLang: string): RoomSt
         (level) => setMicLevel(level),
       );
       await mic.start();
+      // Released (quick tap / during the permission prompt) before the mic came up.
+      if (!talkIntentRef.current) {
+        mic.stop();
+        return;
+      }
       micRef.current = mic;
       setSpeaking(true);
     } catch {
-      setNotice("Microphone access is blocked.");
+      talkIntentRef.current = false;
+      flashNotice("Microphone access is blocked.");
     }
-  }, [status]);
+  }, [status, reconnecting]);
 
   const stopTalk = useCallback(() => {
+    const wasCapturing = micRef.current != null;
+    talkIntentRef.current = false;
     micRef.current?.stop();
     micRef.current = null;
     setSpeaking(false);
     setMicLevel(0);
-    talkEndRef.current = performance.now();
-    send({ type: "end_utterance" });
+    if (wasCapturing) {
+      talkEndRef.current = performance.now();
+      send({ type: "end_utterance" });
+    }
   }, []);
 
   const leave = useCallback(() => {
     intentionalRef.current = true;
+    talkIntentRef.current = false;
     clearReconnectTimer();
     micRef.current?.stop();
     micRef.current = null;
@@ -214,12 +247,17 @@ export function useRoom(roomWsUrl: string, code: string, myLang: string): RoomSt
     wsRef.current = null;
   }, []);
 
+  // Null the refs on unmount too, so a StrictMode remount opens a fresh socket.
   useEffect(() => {
     return () => {
       intentionalRef.current = true;
+      talkIntentRef.current = false;
       clearReconnectTimer();
+      if (noticeTimerRef.current != null) clearTimeout(noticeTimerRef.current);
       micRef.current?.stop();
+      micRef.current = null;
       wsRef.current?.close();
+      wsRef.current = null;
     };
   }, []);
 
